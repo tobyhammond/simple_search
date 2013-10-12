@@ -22,11 +22,24 @@ def index_instance(instance, fields_to_index):
         value = instance
         for lookup in lookups:
             value = getattr(value, lookup)
-        return value
+            
+            if "RelatedManager" in value.__class__.__name__:
+                if lookup == lookups[-2]:
+                    return [ getattr(x, lookups[-1]) for x in value.all() ]
+                else:
+                    raise TypeError("You can only index one level of related object")
+                    
+            elif hasattr(value, "__iter__"):
+                if lookup == lookups[-1]:
+                    return value
+                else:
+                    raise TypeError("You can only index one level of iterable")
+                                
+        return [ value ]
 
     for field in fields_to_index:
-        text = get_data_from_field(field, instance)
-        if text:
+        texts = get_data_from_field(field, instance)
+        for text in texts:
             text = text.lower() #Normalize
 
             words = text.split(" ") #Split on whitespace
