@@ -17,8 +17,15 @@ from google.appengine.ext import db
 def index_instance(instance, fields_to_index):
     unindex_instance(instance)
 
+    def get_data_from_field(field_, instance_):
+        lookups = field_.split("__")
+        value = instance
+        for lookup in lookups:
+            value = getattr(value, lookup)
+        return value
+
     for field in fields_to_index:
-        text = getattr(instance, field, None)
+        text = get_data_from_field(field, instance)
         if text:
             text = text.lower() #Normalize
 
@@ -42,16 +49,21 @@ def index_instance(instance, fields_to_index):
                         instance_db_table=instance._meta.db_table,
                         instance_pk=instance.pk
                     )
-                    def txn(term, index):
-                        index = Index.objects.get(pk=index.pk)
-                        index.occurances += text.count(term)
-                        index.save()
+                    
+                    def txn(term_, index_, created_):
+                        logging.info("Increasing count on index: %s - %s", index_.pk, created_)
+                        index_ = Index.objects.get(pk=index_.pk)
+                        index_.occurances += text.count(term_)
+                        index_.save()
 
-                        counter, created = GlobalOccuranceCount.objects.get_or_create(pk=term)
-                        counter.count += text.count(term)
+                        counter, created = GlobalOccuranceCount.objects.get_or_create(pk=term_)
+                        counter.count += text.count(term_)
                         counter.save()
 
-                    db.run_in_transaction_options(db.create_transaction_options(xg=True), txn, term, index)
+                    db.run_in_transaction_options(
+                        db.create_transaction_options(xg=True), 
+                        txn, term, index, created
+                    )
 
 def unindex_instance(instance):
     indexes = Index.objects.filter(instance_db_table=instance._meta.db_table, instance_pk=instance.pk).all()
@@ -123,6 +135,11 @@ class Index(models.Model):
     instance_db_table = models.CharField(max_length=1024)
     instance_pk = models.PositiveIntegerField(default=0)
     occurances = models.PositiveIntegerField(default=0)
+    
+    class Meta:
+        unique_together = [
+            ('iexact', 'instance_db_table', 'instance_pk')
+        ]
 
 from django.dispatch import receiver
 from django.db.models.signals import post_save, pre_delete
