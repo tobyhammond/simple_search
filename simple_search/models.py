@@ -1,6 +1,8 @@
 import logging
 import shlex
 
+from .cache import BasicCachedModel
+
 from django.db import models
 from google.appengine.ext import db
 
@@ -22,19 +24,19 @@ def index_instance(instance, fields_to_index):
         value = instance
         for lookup in lookups:
             value = getattr(value, lookup)
-            
+
             if "RelatedManager" in value.__class__.__name__:
                 if lookup == lookups[-2]:
                     return [ getattr(x, lookups[-1]) for x in value.all() ]
                 else:
                     raise TypeError("You can only index one level of related object")
-                    
+
             elif hasattr(value, "__iter__"):
                 if lookup == lookups[-1]:
                     return value
                 else:
                     raise TypeError("You can only index one level of iterable")
-                                
+
         return [ value ]
 
     for field in fields_to_index:
@@ -57,14 +59,14 @@ def index_instance(instance, fields_to_index):
                     if not term.strip(): continue
 
                     logging.info("Indexing: '%s'", term)
-                    index, created = Index.objects.get_or_create(
+                    index = Index.objects.create(
                         iexact=term,
                         instance_db_table=instance._meta.db_table,
                         instance_pk=instance.pk
                     )
-                    
-                    def txn(term_, index_, created_):
-                        logging.info("Increasing count on index: %s - %s", index_.pk, created_)
+
+                    def txn(term_, index_):
+                        logging.info("Increasing count on index: %s", index_.pk)
                         index_ = Index.objects.get(pk=index_.pk)
                         index_.occurances += text.count(term_)
                         index_.save()
@@ -74,8 +76,8 @@ def index_instance(instance, fields_to_index):
                         counter.save()
 
                     db.run_in_transaction_options(
-                        db.create_transaction_options(xg=True), 
-                        txn, term, index, created
+                        db.create_transaction_options(xg=True),
+                        txn, term, index
                     )
 
 def unindex_instance(instance):
@@ -143,12 +145,12 @@ class GlobalOccuranceCount(models.Model):
     id = models.CharField(max_length=1024, primary_key=True)
     count = models.PositiveIntegerField(default=0)
 
-class Index(models.Model):
+class Index(BasicCachedModel):
     iexact = models.CharField(max_length=1024)
     instance_db_table = models.CharField(max_length=1024)
     instance_pk = models.PositiveIntegerField(default=0)
     occurances = models.PositiveIntegerField(default=0)
-    
+
     class Meta:
         unique_together = [
             ('iexact', 'instance_db_table', 'instance_pk')
