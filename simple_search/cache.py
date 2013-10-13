@@ -22,7 +22,11 @@ class BasicCachingQueryset(QuerySet):
                     logging.info("Hitting the cache with key: %s", key)
                     return instance
 
-        return super(BasicCachingQueryset, self).get(*args, **kwargs)
+        instance = super(BasicCachingQueryset, self).get(*args, **kwargs)
+
+        if cache.get("DELETED_%s" % instance.pk):
+            #WORKAROUND FOR WHEN HRD LIES
+            raise self.model.DoesNotExist()
 
 class BasicCachingManager(models.Manager):
     def get_query_set(self):
@@ -81,7 +85,11 @@ class BasicCachedModel(models.Model):
 
     def delete(self, *args, **kwargs):
         self._uncache()
-        return super(BasicCachedModel, self).delete(*args, **kwargs)
+        super(BasicCachedModel, self).delete(*args, **kwargs)
+
+        #Mark for 10 seconds that this instance has been deleted
+        #as HRD sometimes still returns it
+        cache.set("DELETED_%s" % self.pk, True, 10)
 
     class Meta:
         abstract = True

@@ -2,7 +2,6 @@ import logging
 import shlex
 
 from .cache import BasicCachedModel
-
 from django.db import models
 from google.appengine.ext import db
 
