@@ -80,19 +80,19 @@ def _do_index(instance, fields_to_index):
 
 def _unindex_then_reindex(instance, fields_to_index):
     unindex_instance(instance)
-    do_index(instance, fields_to_index)
-                    
+    _do_index(instance, fields_to_index)
+
 def index_instance(instance, fields_to_index):
     """
         If we are in a transaction, we must defer the unindex and reindex :(
     """
-    
+
     if db.is_in_transaction():
         defer(_unindex_then_reindex, instance, fields_to_index)
     else:
         unindex_instance(instance)
         _do_index(instance, fields_to_index)
-                    
+
 def unindex_instance(instance):
     indexes = Index.objects.filter(instance_db_table=instance._meta.db_table, instance_pk=instance.pk).all()
     for index in indexes:
