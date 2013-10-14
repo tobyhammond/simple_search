@@ -1,8 +1,10 @@
 import logging
 import shlex
 
+from .cache import BasicCachedModel
 from django.db import models
 from google.appengine.ext import db
+from google.appengine.ext.deferred import defer
 
 """
     REMAINING TO DO!
@@ -14,12 +16,30 @@ from google.appengine.ext import db
     3. Field matches. e.g "id:1234 field1:banana". This should match any other words using indexes, but only return matches that match the field lookups
 """
 
-def index_instance(instance, fields_to_index):
-    unindex_instance(instance)
+def _do_index(instance, fields_to_index):
+    def get_data_from_field(field_, instance_):
+        lookups = field_.split("__")
+        value = instance
+        for lookup in lookups:
+            value = getattr(value, lookup)
+
+            if "RelatedManager" in value.__class__.__name__:
+                if lookup == lookups[-2]:
+                    return [ getattr(x, lookups[-1]) for x in value.all() ]
+                else:
+                    raise TypeError("You can only index one level of related object")
+
+            elif hasattr(value, "__iter__"):
+                if lookup == lookups[-1]:
+                    return value
+                else:
+                    raise TypeError("You can only index one level of iterable")
+
+        return [ value ]
 
     for field in fields_to_index:
-        text = getattr(instance, field, None)
-        if text:
+        texts = get_data_from_field(field, instance)
+        for text in texts:
             text = text.lower() #Normalize
 
             words = text.split(" ") #Split on whitespace
@@ -37,21 +57,41 @@ def index_instance(instance, fields_to_index):
                     if not term.strip(): continue
 
                     logging.info("Indexing: '%s'", term)
-                    index, created = Index.objects.get_or_create(
+                    index = Index.objects.create(
                         iexact=term,
                         instance_db_table=instance._meta.db_table,
                         instance_pk=instance.pk
                     )
-                    def txn(term, index):
-                        index = Index.objects.get(pk=index.pk)
-                        index.occurances += text.count(term)
-                        index.save()
 
-                        counter, created = GlobalOccuranceCount.objects.get_or_create(pk=term)
-                        counter.count += text.count(term)
+                    def txn(term_, index_):
+                        logging.info("Increasing count on index: %s", index_.pk)
+                        index_ = Index.objects.get(pk=index_.pk)
+                        index_.occurances += text.count(term_)
+                        index_.save()
+
+                        counter, created = GlobalOccuranceCount.objects.get_or_create(pk=term_)
+                        counter.count += text.count(term_)
                         counter.save()
 
-                    db.run_in_transaction_options(db.create_transaction_options(xg=True), txn, term, index)
+                    db.run_in_transaction_options(
+                        db.create_transaction_options(xg=True),
+                        txn, term, index
+                    )
+
+def _unindex_then_reindex(instance, fields_to_index):
+    unindex_instance(instance)
+    _do_index(instance, fields_to_index)
+
+def index_instance(instance, fields_to_index):
+    """
+        If we are in a transaction, we must defer the unindex and reindex :(
+    """
+
+    if db.is_in_transaction():
+        defer(_unindex_then_reindex, instance, fields_to_index)
+    else:
+        unindex_instance(instance)
+        _do_index(instance, fields_to_index)
 
 def unindex_instance(instance):
     indexes = Index.objects.filter(instance_db_table=instance._meta.db_table, instance_pk=instance.pk).all()
@@ -118,23 +158,28 @@ class GlobalOccuranceCount(models.Model):
     id = models.CharField(max_length=1024, primary_key=True)
     count = models.PositiveIntegerField(default=0)
 
-class Index(models.Model):
+class Index(BasicCachedModel):
     iexact = models.CharField(max_length=1024)
     instance_db_table = models.CharField(max_length=1024)
     instance_pk = models.PositiveIntegerField(default=0)
     occurances = models.PositiveIntegerField(default=0)
 
+    class Meta:
+        unique_together = [
+            ('iexact', 'instance_db_table', 'instance_pk')
+        ]
+
 from django.dispatch import receiver
 from django.db.models.signals import post_save, pre_delete
 
 @receiver(post_save)
-def post_save(sender, instance, created, raw, using, *args, **kwargs):
+def post_save_index(sender, instance, *args, **kwargs):
     if getattr(instance, "Search", None):
         fields_to_index = getattr(instance.Search, "fields", [])
         if fields_to_index:
             index_instance(instance, fields_to_index)
 
 @receiver(pre_delete)
-def pre_delete(sender, instance, using, *args, **kwarg):
+def pre_delete_unindex(sender, instance, using, *args, **kwarg):
     if getattr(instance, "Search", None):
         unindex_instance(instance)
