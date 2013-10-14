@@ -4,6 +4,7 @@ import shlex
 from .cache import BasicCachedModel
 from django.db import models
 from google.appengine.ext import db
+from google.appengine.ext.deferred import defer
 
 """
     REMAINING TO DO!
@@ -15,9 +16,7 @@ from google.appengine.ext import db
     3. Field matches. e.g "id:1234 field1:banana". This should match any other words using indexes, but only return matches that match the field lookups
 """
 
-def index_instance(instance, fields_to_index):
-    unindex_instance(instance)
-
+def _do_index(instance, fields_to_index):
     def get_data_from_field(field_, instance_):
         lookups = field_.split("__")
         value = instance
@@ -79,6 +78,21 @@ def index_instance(instance, fields_to_index):
                         txn, term, index
                     )
 
+def _unindex_then_reindex(instance, fields_to_index):
+    unindex_instance(instance)
+    do_index(instance, fields_to_index)
+                    
+def index_instance(instance, fields_to_index):
+    """
+        If we are in a transaction, we must defer the unindex and reindex :(
+    """
+    
+    if db.is_in_transaction():
+        defer(_unindex_then_reindex, instance, fields_to_index)
+    else:
+        unindex_instance(instance)
+        _do_index(instance, fields_to_index)
+                    
 def unindex_instance(instance):
     indexes = Index.objects.filter(instance_db_table=instance._meta.db_table, instance_pk=instance.pk).all()
     for index in indexes:
@@ -159,13 +173,13 @@ from django.dispatch import receiver
 from django.db.models.signals import post_save, pre_delete
 
 @receiver(post_save)
-def post_save(sender, instance, created, raw, using, *args, **kwargs):
+def post_save_index(sender, instance, *args, **kwargs):
     if getattr(instance, "Search", None):
         fields_to_index = getattr(instance.Search, "fields", [])
         if fields_to_index:
             index_instance(instance, fields_to_index)
 
 @receiver(pre_delete)
-def pre_delete(sender, instance, using, *args, **kwarg):
+def pre_delete_unindex(sender, instance, using, *args, **kwarg):
     if getattr(instance, "Search", None):
         unindex_instance(instance)
