@@ -3,6 +3,7 @@ import shlex
 
 from .cache import BasicCachedModel
 from django.db import models
+from django.utils.encoding import smart_str
 from google.appengine.ext import db
 from google.appengine.ext.deferred import defer
 
@@ -102,7 +103,7 @@ def unindex_instance(instance):
         index.delete()
 
 def parse_terms(search_string):
-    return shlex.split(search_string.lower())
+    return shlex.split(smart_str(search_string.lower()))
 
 def search(model_class, search_string, per_page=50, current_page=1, total_pages=10):
     terms = parse_terms(search_string)
