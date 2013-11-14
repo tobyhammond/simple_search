@@ -22,6 +22,8 @@ def _do_index(instance, fields_to_index):
         lookups = field_.split("__")
         value = instance
         for lookup in lookups:
+            if value is None:
+                continue
             value = getattr(value, lookup)
 
             if "RelatedManager" in value.__class__.__name__:
@@ -41,6 +43,8 @@ def _do_index(instance, fields_to_index):
     for field in fields_to_index:
         texts = get_data_from_field(field, instance)
         for text in texts:
+            if text is None:
+                continue
             text = text.lower() #Normalize
 
             words = text.split(" ") #Split on whitespace
