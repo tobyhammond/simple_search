@@ -105,7 +105,7 @@ def unindex_instance(instance):
 def parse_terms(search_string):
     return shlex.split(smart_str(search_string.lower()))
 
-def search(model_class, search_string, per_page=50, current_page=1, total_pages=10):
+def search(model_class, search_string, per_page=50, current_page=1, total_pages=10, **filters):
     terms = parse_terms(search_string)
 
     #Get all matching terms
@@ -148,7 +148,12 @@ def search(model_class, search_string, per_page=50, current_page=1, total_pages=
         order[pk] = index
 
     sorted_results = [None] * len(order.keys())
-    results = model_class.objects.filter(pk__in=order.keys())
+
+    queryset = model_class.objects.all()
+    if filters:
+        queryset = queryset.filter(**filters)
+
+    results = queryset.filter(pk__in=order.keys())
     for result in results:
         position = order[result.pk]
         sorted_results[position] = result
