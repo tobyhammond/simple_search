@@ -99,6 +99,20 @@ class SearchTests(PotatoTestCase):
         self.assertItemsEqual([instance2, instance3], search(SampleModel, "banana"))
         self.assertItemsEqual([instance2], search(SampleModel, "cherry"))
 
+    def test_additional_filters(self):
+        instance1 = SampleModel.objects.create(field1="banana", field2="apple")
+        instance2 = SampleModel.objects.create(field1="banana", field2="cherry")
+        instance3 = SampleModel.objects.create(field1="pineapple", field2="apple")
+
+        index_instance(instance1, ["field2"])
+        index_instance(instance2, ["field2"])
+        index_instance(instance3, ["field2"])
+
+        self.assertItemsEqual([instance1, instance3], search(SampleModel, "apple"))
+
+        # Now pass to search a queryset filter and check that it's applied
+        self.assertItemsEqual([instance1], search(SampleModel, "apple", **{'field1': 'banana'}))
+
     @unittest.skip("Not implemented yet")
     def test_logic_searching(self):
         instance1 = SampleModel.objects.create(field1="Banana", field2="Apple")
