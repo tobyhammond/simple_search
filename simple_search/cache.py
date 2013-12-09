@@ -1,32 +1,35 @@
 import copy
 import logging
+import time
 
 from django.core.cache import cache
 from django.db.models.query import QuerySet
 from django.db import models
+
+from google.appengine.api.datastore import IsInTransaction
 
 #Adds basic caching on unique_together and PK fields
 # TODO: add unique=True caching
 
 class BasicCachingQueryset(QuerySet):
     def get(self, *args, **kwargs):
-        logging.info("Get with kwargs: %s", kwargs)
-        for unique_together in self.model._meta.unique_together + [ ("pk", ), ("id",)]:
-            if set(unique_together).issubset(set(kwargs.keys())):
-                #We can hit the cache
-                key = self.model._make_key(unique_together, kwargs)
-                logging.info("Attempting cache with key: %s", key)
-                instance = cache.get(key)
-                if instance:
-                    #FIXME: Check against any other arguments
-                    logging.info("Hitting the cache with key: %s", key)
-                    return instance
+        if not IsInTransaction():
+            for unique_together in self.model._meta.unique_together + [ ("pk", ), ("id",)]:
+                if set(unique_together).issubset(set(kwargs.keys())):
+                    #We can hit the cache
+                    key = self.model._make_key(unique_together, kwargs)
+                    instance = cache.get(key)
+                    if instance:
+                        #FIXME: Check against any other arguments
+                        return instance
 
         instance = super(BasicCachingQueryset, self).get(*args, **kwargs)
 
         if cache.get("DELETED_%s" % instance.pk):
             #WORKAROUND FOR WHEN HRD LIES
             raise self.model.DoesNotExist()
+
+        return instance
 
 class BasicCachingManager(models.Manager):
     def get_query_set(self):

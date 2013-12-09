@@ -68,6 +68,7 @@ def _do_index(instance, fields_to_index):
                         instance_pk=instance.pk
                     )
 
+                    @db.transactional(xg=True)
                     def txn(term_, index_):
                         logging.info("Increasing count on index: %s", index_.pk)
                         index_ = Index.objects.get(pk=index_.pk)
@@ -78,10 +79,14 @@ def _do_index(instance, fields_to_index):
                         counter.count += text.count(term_)
                         counter.save()
 
-                    db.run_in_transaction_options(
-                        db.create_transaction_options(xg=True),
-                        txn, term, index
-                    )
+                    while True:
+                        try:
+                            txn(term, index)
+                            break
+                        except db.TransactionFailedError:
+                            logging.warning("Transaction collision, retrying!")
+                            time.sleep(1)
+                            continue
 
 def _unindex_then_reindex(instance, fields_to_index):
     unindex_instance(instance)
