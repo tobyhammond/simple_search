@@ -7,6 +7,7 @@ from django.db import models
 from django.utils.encoding import smart_str
 from google.appengine.ext import db
 from google.appengine.ext.deferred import defer
+from django.conf import settings
 
 """
     REMAINING TO DO!
@@ -17,6 +18,8 @@ from google.appengine.ext.deferred import defer
     2. Cross-join indexing  e.g. book__title on an Author.
     3. Field matches. e.g "id:1234 field1:banana". This should match any other words using indexes, but only return matches that match the field lookups
 """
+
+QUEUE_FOR_INDEXING = getattr(settings, "QUEUE_FOR_INDEXING", "default")
 
 def _do_index(instance, fields_to_index):
     def get_data_from_field(field_, instance_):
@@ -93,13 +96,13 @@ def _unindex_then_reindex(instance, fields_to_index):
     unindex_instance(instance)
     _do_index(instance, fields_to_index)
 
-def index_instance(instance, fields_to_index):
+def index_instance(instance, fields_to_index, defer_index=True):
     """
         If we are in a transaction, we must defer the unindex and reindex :(
     """
 
-    if db.is_in_transaction():
-        defer(_unindex_then_reindex, instance, fields_to_index)
+    if db.is_in_transaction() or defer_index:
+        defer(_unindex_then_reindex, instance, fields_to_index, _queue=QUEUE_FOR_INDEXING)
     else:
         unindex_instance(instance)
         _do_index(instance, fields_to_index)
@@ -189,11 +192,11 @@ from django.dispatch import receiver
 from django.db.models.signals import post_save, pre_delete
 
 @receiver(post_save)
-def post_save_index(sender, instance, *args, **kwargs):
+def post_save_index(sender, instance, created, raw, *args, **kwargs):
     if getattr(instance, "Search", None):
         fields_to_index = getattr(instance.Search, "fields", [])
         if fields_to_index:
-            index_instance(instance, fields_to_index)
+            index_instance(instance, fields_to_index, defer_index=not raw) #Don't defer if we are loading from a fixture
 
 @receiver(pre_delete)
 def pre_delete_unindex(sender, instance, using, *args, **kwarg):

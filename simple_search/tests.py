@@ -28,7 +28,7 @@ class SearchTests(PotatoTestCase):
             field1="bananas apples cherries plums oranges kiwi"
         )
 
-        index_instance(instance1, ["field1"])
+        index_instance(instance1, ["field1"], defer_index=False)
 
         self.assertEqual(1, Index.objects.filter(iexact="bananas").count())
         self.assertEqual(1, Index.objects.filter(iexact="bananas apples").count())
@@ -51,9 +51,9 @@ class SearchTests(PotatoTestCase):
         instance2 = SampleModel.objects.create(field1="eat a chicken")
         instance3 = SampleModel.objects.create(field1="sleep a lot")
 
-        index_instance(instance1, ["field1"])
-        index_instance(instance2, ["field1"])
-        index_instance(instance3, ["field1"])
+        index_instance(instance1, ["field1"], defer_index=False)
+        index_instance(instance2, ["field1"], defer_index=False)
+        index_instance(instance3, ["field1"], defer_index=False)
 
         results = search(SampleModel, "eat a")
 
@@ -73,19 +73,19 @@ class SearchTests(PotatoTestCase):
         instance2 = SampleModel.objects.create(field1="banana", field2="Cherry")
         instance3 = SampleModel.objects.create(field1="BANANA")
 
-        index_instance(instance1, ["field1", "field2"])
+        index_instance(instance1, ["field1", "field2"], defer_index=False)
         self.assertEqual(2, Index.objects.count())
         self.assertEqual(1, GlobalOccuranceCount.objects.get(pk="banana").count)
         self.assertEqual(1, GlobalOccuranceCount.objects.get(pk="apple").count)
 
-        index_instance(instance2, ["field1", "field2"])
+        index_instance(instance2, ["field1", "field2"], defer_index=False)
 
         self.assertEqual(4, Index.objects.count())
         self.assertEqual(2, GlobalOccuranceCount.objects.get(pk="banana").count)
         self.assertEqual(1, GlobalOccuranceCount.objects.get(pk="apple").count)
         self.assertEqual(1, GlobalOccuranceCount.objects.get(pk="cherry").count)
 
-        index_instance(instance3, ["field1"])
+        index_instance(instance3, ["field1"], defer_index=False)
         self.assertEqual(5, Index.objects.count())
         self.assertEqual(3, GlobalOccuranceCount.objects.get(pk="banana").count)
         self.assertEqual(1, GlobalOccuranceCount.objects.get(pk="apple").count)
@@ -104,9 +104,9 @@ class SearchTests(PotatoTestCase):
         instance2 = SampleModel.objects.create(field1="banana", field2="cherry")
         instance3 = SampleModel.objects.create(field1="pineapple", field2="apple")
 
-        index_instance(instance1, ["field2"])
-        index_instance(instance2, ["field2"])
-        index_instance(instance3, ["field2"])
+        index_instance(instance1, ["field2"], defer_index=False)
+        index_instance(instance2, ["field2"], defer_index=False)
+        index_instance(instance3, ["field2"], defer_index=False)
 
         self.assertItemsEqual([instance1, instance3], search(SampleModel, "apple"))
 
@@ -119,9 +119,9 @@ class SearchTests(PotatoTestCase):
         instance2 = SampleModel.objects.create(field1="banana", field2="Cherry")
         instance3 = SampleModel.objects.create(field1="BANANA")
 
-        index_instance(instance1, ["field1", "field2"])
-        index_instance(instance2, ["field1", "field2"])
-        index_instance(instance3, ["field1"])
+        index_instance(instance1, ["field1", "field2"], defer_index=False)
+        index_instance(instance2, ["field1", "field2"], defer_index=False)
+        index_instance(instance3, ["field1"], defer_index=False)
 
         self.assertItemsEqual([instance1], search(SampleModel, "banana AND apple"))
         self.assertItemsEqual([instance1, instance2], search(SampleModel, "apple OR cherry"))
