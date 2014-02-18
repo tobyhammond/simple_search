@@ -65,27 +65,24 @@ def _do_index(instance, fields_to_index):
 
                     if not term.strip(): continue
 
-                    logging.info("Indexing: '%s'", term)
-                    index = Index.objects.create(
-                        iexact=term,
-                        instance_db_table=instance._meta.db_table,
-                        instance_pk=instance.pk
-                    )
-
                     @db.transactional(xg=True)
-                    def txn(term_, index_):
-                        logging.info("Increasing count on index: %s", index_.pk)
-                        index_ = Index.objects.get(pk=index_.pk)
-                        index_.occurances += text.count(term_)
-                        index_.save()
+                    def txn(term_):
+                        logging.info("Indexing: '%s'", term)
+                        term_count = text.count(term_)
 
+                        Index.objects.create(
+                            iexact=term,
+                            instance_db_table=instance._meta.db_table,
+                            instance_pk=instance.pk,
+                            occurances=term_count
+                        )
                         counter, created = GlobalOccuranceCount.objects.get_or_create(pk=term_)
-                        counter.count += text.count(term_)
+                        counter.count += term_count
                         counter.save()
 
                     while True:
                         try:
-                            txn(term, index)
+                            txn(term)
                             break
                         except db.TransactionFailedError:
                             logging.warning("Transaction collision, retrying!")
@@ -110,15 +107,21 @@ def index_instance(instance, fields_to_index, defer_index=True):
 def unindex_instance(instance):
     indexes = Index.objects.filter(instance_db_table=instance._meta.db_table, instance_pk=instance.pk).all()
     for index in indexes:
+
+        @db.transactional(xg=True)
+        def txn(_index):
+            count = GlobalOccuranceCount.objects.get(pk=_index.iexact)
+            count.count -= _index.occurances
+            count.save()
+            _index.delete()
+
         try:
-            count = GlobalOccuranceCount.objects.get(pk=index.iexact)
+            txn(index)
         except GlobalOccuranceCount.DoesNotExist:
             logging.warning("A GlobalOccuranceCount for {0} does not exist, ignoring".format(index.iexact))
             continue
 
-        count.count -= index.occurances
-        count.save()
-        index.delete()
+
 
 def parse_terms(search_string):
     return shlex.split(smart_str(search_string.lower()))
