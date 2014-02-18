@@ -110,7 +110,12 @@ def index_instance(instance, fields_to_index, defer_index=True):
 def unindex_instance(instance):
     indexes = Index.objects.filter(instance_db_table=instance._meta.db_table, instance_pk=instance.pk).all()
     for index in indexes:
-        count = GlobalOccuranceCount.objects.get(pk=index.iexact)
+        try:
+            count = GlobalOccuranceCount.objects.get(pk=index.iexact)
+        except GlobalOccuranceCount.DoesNotExist:
+            logging.warning("A GlobalOccuranceCount for {0} does not exist, ignoring".format(index.iexact))
+            continue
+
         count.count -= index.occurances
         count.save()
         index.delete()
