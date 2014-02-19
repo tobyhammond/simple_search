@@ -119,7 +119,7 @@ def unindex_instance(instance):
         try:
             txn(index)
         except GlobalOccuranceCount.DoesNotExist:
-            logging.warning("A GlobalOccuranceCount for {0} does not exist, ignoring".format(index.iexact))
+            logging.warning("A GlobalOccuranceCount for Index: %s does not exist, ignoring", index.pk)
             continue
 
 
