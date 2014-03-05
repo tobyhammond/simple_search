@@ -2,9 +2,8 @@ import logging
 import shlex
 import time
 
-from .cache import BasicCachedModel
 from django.db import models
-from django.utils.encoding import smart_str
+from django.utils.encoding import smart_str, smart_unicode
 from google.appengine.ext import db
 from google.appengine.ext.deferred import defer
 from django.conf import settings
@@ -49,6 +48,8 @@ def _do_index(instance, fields_to_index):
         for text in texts:
             if text is None:
                 continue
+
+            text = smart_unicode(text)
             text = text.lower() #Normalize
 
             words = text.split(" ") #Split on whitespace
@@ -61,17 +62,17 @@ def _do_index(instance, fields_to_index):
                     if len(term_words) != j:
                         break
 
-                    term = " ".join(term_words)
+                    term = u" ".join(term_words)
 
                     if not term.strip(): continue
 
                     @db.transactional(xg=True)
                     def txn(term_):
-                        logging.info("Indexing: '%s'", term)
+                        logging.info("Indexing: '%s', %s", term_, type(term_))
                         term_count = text.count(term_)
 
                         Index.objects.create(
-                            iexact=term,
+                            iexact=term_,
                             instance_db_table=instance._meta.db_table,
                             instance_pk=instance.pk,
                             occurances=term_count
@@ -185,7 +186,7 @@ class GlobalOccuranceCount(models.Model):
     id = models.CharField(max_length=1024, primary_key=True)
     count = models.PositiveIntegerField(default=0)
 
-class Index(BasicCachedModel):
+class Index(models.Model):
     iexact = models.CharField(max_length=1024)
     instance_db_table = models.CharField(max_length=1024)
     instance_pk = models.PositiveIntegerField(default=0)
