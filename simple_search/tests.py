@@ -22,6 +22,9 @@ class SampleModel(models.Model):
     field1 = models.CharField(max_length=1024)
     field2 = models.CharField(max_length=1024)
 
+    def __unicode__(self):
+        return u"{} - {}".format(self.field1, self.field2)
+
 class SearchTests(PotatoTestCase):
     def test_field_indexing(self):
         instance1 = SampleModel.objects.create(
@@ -58,7 +61,7 @@ class SearchTests(PotatoTestCase):
         results = search(SampleModel, "eat a")
 
         #Instance 3 should come last, because it only contains "a"
-        self.assertEqual(instance3, results[2])
+        self.assertEqual(instance3, results[2], results)
 
         results = search(SampleModel, "eat fish")
 
@@ -130,4 +133,3 @@ class SearchTests(PotatoTestCase):
 
         self.assertItemsEqual([], search(SampleModel, "banana AND apple"))
         self.assertItemsEqual([instance2], search(SampleModel, "apple OR cherry"))
-

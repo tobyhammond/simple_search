@@ -117,7 +117,14 @@ def unindex_instance(instance):
             _index.delete()
 
         try:
-            txn(index)
+            while True:
+                try:
+                    txn(index)
+                    break
+                except db.TransactionFailedError:
+                    logging.warning("Transaction collision, retrying!")
+                    time.sleep(1)
+                    continue
         except GlobalOccuranceCount.DoesNotExist:
             logging.warning("A GlobalOccuranceCount for Index: %s does not exist, ignoring", index.pk)
             continue
@@ -180,7 +187,7 @@ def search(model_class, search_string, per_page=50, current_page=1, total_pages=
         position = order[result.pk]
         sorted_results[position] = result
 
-    return results
+    return sorted_results
 
 class GlobalOccuranceCount(models.Model):
     id = models.CharField(max_length=1024, primary_key=True)
