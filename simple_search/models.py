@@ -193,6 +193,23 @@ class GlobalOccuranceCount(models.Model):
     id = models.CharField(max_length=1024, primary_key=True)
     count = models.PositiveIntegerField(default=0)
 
+    def update(self):
+        count = sum(Index.objects.filter(iexact=self.id).values_list('occurances', flat=True))
+
+        @db.transactional
+        def txn():
+            goc = GlobalOccuranceCount.objects.get(pk=self.id)
+            goc.count = count
+            goc.save()
+
+        while True:
+            try:
+                txn()
+                break
+            except db.TransactionFailedError:
+                time.sleep(1)
+                continue
+
 class Index(models.Model):
     iexact = models.CharField(max_length=1024)
     instance_db_table = models.CharField(max_length=1024)
