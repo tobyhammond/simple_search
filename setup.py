@@ -5,7 +5,7 @@ NAME = 'simple_search'
 PACKAGES = find_packages()
 DESCRIPTION = 'A basic search app for Django'
 URL = "https://github.com/potatolondon/simple_search"
-LONG_DESCRIPTION = open(os.path.join(os.path.dirname(__file__), 'README.md')).read()
+LONG_DESCRIPTION = open(os.path.join(os.path.dirname(__file__), 'README')).read()
 AUTHOR = 'Potato London Ltd.'
 
 EXTRAS = {}
