@@ -108,6 +108,10 @@ def index_instance(instance, fields_to_index, defer_index=True):
 def unindex_instance(instance):
     indexes = Index.objects.filter(instance_db_table=instance._meta.db_table, instance_pk=instance.pk).all()
     for index in indexes:
+        try:
+            index = Index.objects.get(pk=index.pk)
+        except Index.DoesNotExist:
+            continue
 
         @db.transactional(xg=True)
         def txn(_index):
@@ -187,7 +191,7 @@ def search(model_class, search_string, per_page=50, current_page=1, total_pages=
         position = order[result.pk]
         sorted_results[position] = result
 
-    return sorted_results
+    return [x for x in sorted_results if x ]
 
 class GlobalOccuranceCount(models.Model):
     id = models.CharField(max_length=1024, primary_key=True)
