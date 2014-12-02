@@ -108,13 +108,14 @@ def index_instance(instance, fields_to_index, defer_index=True):
 def unindex_instance(instance):
     indexes = Index.objects.filter(instance_db_table=instance._meta.db_table, instance_pk=instance.pk).all()
     for index in indexes:
-        try:
-            index = Index.objects.get(pk=index.pk)
-        except Index.DoesNotExist:
-            continue
 
         @db.transactional(xg=True)
         def txn(_index):
+            try:
+                _index = Index.objects.get(pk=_index.pk)
+            except Index.DoesNotExist:
+                return
+
             count = GlobalOccuranceCount.objects.get(pk=_index.iexact)
             count.count -= _index.occurances
             count.save()
