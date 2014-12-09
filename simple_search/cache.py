@@ -1,6 +1,5 @@
 import copy
 import logging
-import time
 
 from django.core.cache import cache
 from django.db.models.query import QuerySet
@@ -10,6 +9,7 @@ from google.appengine.api.datastore import IsInTransaction
 
 #Adds basic caching on unique_together and PK fields
 # TODO: add unique=True caching
+
 
 class BasicCachingQueryset(QuerySet):
     def get(self, *args, **kwargs):
@@ -31,9 +31,11 @@ class BasicCachingQueryset(QuerySet):
 
         return instance
 
+
 class BasicCachingManager(models.Manager):
     def get_query_set(self):
         return BasicCachingQueryset(self.model, using=self._db)
+
 
 class BasicCachedModel(models.Model):
     objects = BasicCachingManager()

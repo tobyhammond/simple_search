@@ -4,19 +4,21 @@ when you run "manage.py test".
 
 Replace this with more appropriate tests for your application.
 """
-
 import unittest
+
 from django.test import TestCase
 from django.db import models
+
 from potatobase.testbase import PotatoTestCase
 
 from .models import (
-    GlobalOccuranceCount,
+    GlobalOccurrenceCount,
     Index,
     index_instance,
     unindex_instance,
     search
 )
+
 
 class SampleModel(models.Model):
     field1 = models.CharField(max_length=1024)
@@ -24,6 +26,7 @@ class SampleModel(models.Model):
 
     def __unicode__(self):
         return u"{} - {}".format(self.field1, self.field2)
+
 
 class SearchTests(PotatoTestCase):
     def test_field_indexing(self):
@@ -38,7 +41,7 @@ class SearchTests(PotatoTestCase):
         self.assertEqual(1, Index.objects.filter(iexact="bananas apples cherries").count())
         self.assertEqual(1, Index.objects.filter(iexact="bananas apples cherries plums").count())
 
-        #We only store up to 4 adjacent words
+        # We only store up to 4 adjacent words
         self.assertEqual(0, Index.objects.filter(iexact="bananas apples cherries plums oranges").count())
 
         self.assertEqual(1, Index.objects.filter(iexact="apples").count())
@@ -46,7 +49,7 @@ class SearchTests(PotatoTestCase):
         self.assertEqual(1, Index.objects.filter(iexact="apples cherries plums").count())
         self.assertEqual(1, Index.objects.filter(iexact="apples cherries plums oranges").count())
 
-        #We only store up to 4 adjacent words
+        # We only store up to 4 adjacent words
         self.assertEqual(0, Index.objects.filter(iexact="apples cherries plums oranges kiwis").count())
 
     def test_ordering(self):
@@ -60,17 +63,17 @@ class SearchTests(PotatoTestCase):
 
         results = search(SampleModel, "eat a")
 
-        #Instance 3 should come last, because it only contains "a"
+        # Instance 3 should come last, because it only contains "a"
         self.assertEqual(instance3, results[2], results)
 
         results = search(SampleModel, "eat fish")
 
-        self.assertEqual(instance1, results[0]) #Instance 1 matches 2 uncommon words
-        self.assertEqual(instance2, results[1]) #Instance 2 matches 1 uncommon word
+        self.assertEqual(instance1, results[0])  # Instance 1 matches 2 uncommon words
+        self.assertEqual(instance2, results[1])  # Instance 2 matches 1 uncommon word
 
     def test_basic_searching(self):
         self.assertEqual(0, SampleModel.objects.count())
-        self.assertEqual(0, GlobalOccuranceCount.objects.count())
+        self.assertEqual(0, GlobalOccurrenceCount.objects.count())
 
         instance1 = SampleModel.objects.create(field1="Banana", field2="Apple")
         instance2 = SampleModel.objects.create(field1="banana", field2="Cherry")
@@ -78,21 +81,21 @@ class SearchTests(PotatoTestCase):
 
         index_instance(instance1, ["field1", "field2"], defer_index=False)
         self.assertEqual(2, Index.objects.count())
-        self.assertEqual(1, GlobalOccuranceCount.objects.get(pk="banana").count)
-        self.assertEqual(1, GlobalOccuranceCount.objects.get(pk="apple").count)
+        self.assertEqual(1, GlobalOccurrenceCount.objects.get(pk="banana").count)
+        self.assertEqual(1, GlobalOccurrenceCount.objects.get(pk="apple").count)
 
         index_instance(instance2, ["field1", "field2"], defer_index=False)
 
         self.assertEqual(4, Index.objects.count())
-        self.assertEqual(2, GlobalOccuranceCount.objects.get(pk="banana").count)
-        self.assertEqual(1, GlobalOccuranceCount.objects.get(pk="apple").count)
-        self.assertEqual(1, GlobalOccuranceCount.objects.get(pk="cherry").count)
+        self.assertEqual(2, GlobalOccurrenceCount.objects.get(pk="banana").count)
+        self.assertEqual(1, GlobalOccurrenceCount.objects.get(pk="apple").count)
+        self.assertEqual(1, GlobalOccurrenceCount.objects.get(pk="cherry").count)
 
         index_instance(instance3, ["field1"], defer_index=False)
         self.assertEqual(5, Index.objects.count())
-        self.assertEqual(3, GlobalOccuranceCount.objects.get(pk="banana").count)
-        self.assertEqual(1, GlobalOccuranceCount.objects.get(pk="apple").count)
-        self.assertEqual(1, GlobalOccuranceCount.objects.get(pk="cherry").count)
+        self.assertEqual(3, GlobalOccurrenceCount.objects.get(pk="banana").count)
+        self.assertEqual(1, GlobalOccurrenceCount.objects.get(pk="apple").count)
+        self.assertEqual(1, GlobalOccurrenceCount.objects.get(pk="cherry").count)
 
         self.assertItemsEqual([instance1, instance2, instance3], search(SampleModel, "banana"))
         self.assertItemsEqual([instance2], search(SampleModel, "cherry"))

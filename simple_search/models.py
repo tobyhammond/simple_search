@@ -20,6 +20,7 @@ from django.conf import settings
 
 QUEUE_FOR_INDEXING = getattr(settings, "QUEUE_FOR_INDEXING", "default")
 
+
 def _do_index(instance, fields_to_index):
     def get_data_from_field(field_, instance_):
         lookups = field_.split("__")
@@ -50,11 +51,11 @@ def _do_index(instance, fields_to_index):
                 continue
 
             text = smart_unicode(text)
-            text = text.lower() #Normalize
+            text = text.lower()  # Normalize
 
-            words = text.split(" ") #Split on whitespace
+            words = text.split(" ")  # Split on whitespace
 
-            #Build up combinations of adjacent words
+            # Build up combinations of adjacent words
             for i in xrange(0, len(words)):
                 for j in xrange(1, 5):
                     term_words = words[i:i+j]
@@ -75,9 +76,9 @@ def _do_index(instance, fields_to_index):
                             iexact=term_,
                             instance_db_table=instance._meta.db_table,
                             instance_pk=instance.pk,
-                            occurances=term_count
+                            occurrences=term_count
                         )
-                        counter, created = GlobalOccuranceCount.objects.get_or_create(pk=term_)
+                        counter, created = GlobalOccurrenceCount.objects.get_or_create(pk=term_)
                         counter.count += term_count
                         counter.save()
 
@@ -90,9 +91,11 @@ def _do_index(instance, fields_to_index):
                             time.sleep(1)
                             continue
 
+
 def _unindex_then_reindex(instance, fields_to_index):
     unindex_instance(instance)
     _do_index(instance, fields_to_index)
+
 
 def index_instance(instance, fields_to_index, defer_index=True):
     """
@@ -105,6 +108,7 @@ def index_instance(instance, fields_to_index, defer_index=True):
         unindex_instance(instance)
         _do_index(instance, fields_to_index)
 
+
 def unindex_instance(instance):
     indexes = Index.objects.filter(instance_db_table=instance._meta.db_table, instance_pk=instance.pk).all()
     for index in indexes:
@@ -116,8 +120,8 @@ def unindex_instance(instance):
             except Index.DoesNotExist:
                 return
 
-            count = GlobalOccuranceCount.objects.get(pk=_index.iexact)
-            count.count -= _index.occurances
+            count = GlobalOccurrenceCount.objects.get(pk=_index.iexact)
+            count.count -= _index.occurrences
             count.save()
             _index.delete()
 
@@ -130,20 +134,20 @@ def unindex_instance(instance):
                     logging.warning("Transaction collision, retrying!")
                     time.sleep(1)
                     continue
-        except GlobalOccuranceCount.DoesNotExist:
-            logging.warning("A GlobalOccuranceCount for Index: %s does not exist, ignoring", index.pk)
+        except GlobalOccurrenceCount.DoesNotExist:
+            logging.warning("A GlobalOccurrenceCount for Index: %s does not exist, ignoring", index.pk)
             continue
-
 
 
 def parse_terms(search_string):
     return shlex.split(smart_str(search_string.lower()))
 
+
 def search(model_class, search_string, per_page=50, current_page=1, total_pages=10, **filters):
     terms = parse_terms(search_string)
 
-    #Get all matching terms
-    matching_terms = dict(GlobalOccuranceCount.objects.filter(pk__in=terms).values_list('pk', 'count'))
+    # Get all matching terms
+    matching_terms = dict(GlobalOccurrenceCount.objects.filter(pk__in=terms).values_list('pk', 'count'))
     matches = Index.objects.filter(iexact__in=terms, instance_db_table=model_class._meta.db_table).all()
 
     instance_weights = {}
@@ -170,10 +174,10 @@ def search(model_class, search_string, per_page=50, current_page=1, total_pages=
 
     final_weights.sort()
 
-    #Restrict to the max possible
+    # Restrict to the max possible
     final_weights = final_weights[:total_pages*per_page]
 
-    #Restrict to the page
+    # Restrict to the page
     offset = ((current_page - 1) * per_page)
     final_weights = final_weights[offset:offset + per_page]
 
@@ -192,18 +196,19 @@ def search(model_class, search_string, per_page=50, current_page=1, total_pages=
         position = order[result.pk]
         sorted_results[position] = result
 
-    return [x for x in sorted_results if x ]
+    return [x for x in sorted_results if x]
 
-class GlobalOccuranceCount(models.Model):
+
+class GlobalOccurrenceCount(models.Model):
     id = models.CharField(max_length=1024, primary_key=True)
     count = models.PositiveIntegerField(default=0)
 
     def update(self):
-        count = sum(Index.objects.filter(iexact=self.id).values_list('occurances', flat=True))
+        count = sum(Index.objects.filter(iexact=self.id).values_list('occurrences', flat=True))
 
         @db.transactional
         def txn():
-            goc = GlobalOccuranceCount.objects.get(pk=self.id)
+            goc = GlobalOccurrenceCount.objects.get(pk=self.id)
             goc.count = count
             goc.save()
 
@@ -215,11 +220,12 @@ class GlobalOccuranceCount(models.Model):
                 time.sleep(1)
                 continue
 
+
 class Index(models.Model):
     iexact = models.CharField(max_length=1024)
     instance_db_table = models.CharField(max_length=1024)
     instance_pk = models.PositiveIntegerField(default=0)
-    occurances = models.PositiveIntegerField(default=0)
+    occurrences = models.PositiveIntegerField(default=0)
 
     class Meta:
         unique_together = [
@@ -229,12 +235,14 @@ class Index(models.Model):
 from django.dispatch import receiver
 from django.db.models.signals import post_save, pre_delete
 
+
 @receiver(post_save)
 def post_save_index(sender, instance, created, raw, *args, **kwargs):
     if getattr(instance, "Search", None):
         fields_to_index = getattr(instance.Search, "fields", [])
         if fields_to_index:
             index_instance(instance, fields_to_index, defer_index=not raw) #Don't defer if we are loading from a fixture
+
 
 @receiver(pre_delete)
 def pre_delete_unindex(sender, instance, using, *args, **kwarg):
