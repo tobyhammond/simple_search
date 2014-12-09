@@ -187,7 +187,9 @@ def search(model_class, search_string, per_page=50, current_page=1, total_pages=
     if filters:
         queryset = queryset.filter(**filters)
 
-    results = queryset.filter(pk__in=order.keys())
+    # Don't use queryset.filter here as it is broken when used with `pk__in`
+    results = [x for x in queryset if x.pk in order.keys()]
+
     for result in results:
         position = order[result.pk]
         sorted_results[position] = result
