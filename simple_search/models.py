@@ -5,7 +5,7 @@ import time
 from django.db import models
 from django.utils.encoding import smart_str, smart_unicode
 from django.conf import settings
-
+from django.db import IntegrityError
 from djangae.db import transaction
 
 from google.appengine.ext import db
@@ -46,6 +46,8 @@ def _do_index(instance, fields_to_index):
 
         return [ value ]
 
+    instance = instance.__class__.objects.get(pk=instance.pk)
+
     for field in fields_to_index:
         texts = get_data_from_field(field, instance)
         for text in texts:
@@ -71,20 +73,32 @@ def _do_index(instance, fields_to_index):
 
                     while True:
                         try:
+                            filter_args = dict(
+                                iexact=term,
+                                instance_db_table=instance._meta.db_table,
+                                instance_pk=instance.pk
+                            )
+
+                            if Index.objects.filter(**filter_args).exists():
+                                # Don't reindex if the index already exists
+                                break
+
                             with transaction.atomic(xg=True):
                                 logging.info("Indexing: '%s', %s", term, type(term))
                                 term_count = text.count(term)
 
-                                Index.objects.create(
-                                    iexact=term,
-                                    instance_db_table=instance._meta.db_table,
-                                    instance_pk=instance.pk,
-                                    occurances=term_count
-                                )
+                                try:
+                                    filter_args["occurances"] = term_count
+                                    Index.objects.create(
+                                        **filter_args
+                                    )
 
-                                counter, created = GlobalOccuranceCount.objects.get_or_create(pk=term)
-                                counter.count += term_count
-                                counter.save()
+                                    counter, created = GlobalOccuranceCount.objects.get_or_create(pk=term)
+                                    counter.count += term_count
+                                    counter.save()
+                                except IntegrityError:
+                                    # If we already created this index for this instance, then ignore
+                                    pass
                                 break
                         except transaction.TransactionFailedError:
                             logging.warning("Transaction collision, retrying!")
@@ -107,19 +121,6 @@ def index_instance(instance, fields_to_index, defer_index=True):
 def unindex_instance(instance):
     indexes = Index.objects.filter(instance_db_table=instance._meta.db_table, instance_pk=instance.pk).all()
     for index in indexes:
-
-        @db.transactional(xg=True)
-        def txn(_index):
-            try:
-                _index = Index.objects.get(pk=_index.pk)
-            except Index.DoesNotExist:
-                return
-
-            count = GlobalOccuranceCount.objects.get(pk=_index.iexact)
-            count.count -= _index.occurances
-            count.save()
-            _index.delete()
-
         try:
             while True:
                 try:
@@ -133,6 +134,9 @@ def unindex_instance(instance):
                         count.count -= index.occurances
                         count.save()
                         index.delete()
+
+                        if count.count < 0:
+                            logging.error("The GOC of {} was negative ({}) while unindexing {}".format(count.pk, count.count, index.pk))
                         break
 
                 except transaction.TransactionFailedError:
@@ -208,19 +212,18 @@ class GlobalOccuranceCount(models.Model):
     count = models.PositiveIntegerField(default=0)
 
     def update(self):
-        count = sum(Index.objects.filter(iexact=self.id).values_list('occurances', flat=True))
-
-        @db.transactional
-        def txn():
-            goc = GlobalOccuranceCount.objects.get(pk=self.id)
-            goc.count = count
-            goc.save()
-
         while True:
             try:
-                txn()
-                break
-            except db.TransactionFailedError:
+                count = 0
+                for index in Index.objects.filter(iexact=self.id):
+                    count += Index.objects.get(pk=index.pk).occurances
+
+                with transaction.atomic():
+                    goc = GlobalOccuranceCount.objects.get(pk=self.id)
+                    goc.count = count
+                    goc.save()
+
+            except transaction.TransactionFailedError:
                 time.sleep(1)
                 continue
 

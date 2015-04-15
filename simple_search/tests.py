@@ -5,6 +5,8 @@ when you run "manage.py test".
 Replace this with more appropriate tests for your application.
 """
 
+from djangae.contrib import sleuth
+
 import unittest
 from django.db import models
 
@@ -133,3 +135,28 @@ class SearchTests(TestCase):
 
         self.assertItemsEqual([], search(SampleModel, "banana AND apple"))
         self.assertItemsEqual([instance2], search(SampleModel, "apple OR cherry"))
+
+    def test_multiple_unindexing_only_does_one(self):
+        instance1 = SampleModel.objects.create(field1="Banana", field2="Apple")
+        index_instance(instance1, ["field1", "field2"], defer_index=False)
+
+        goc = GlobalOccuranceCount.objects.get(pk="banana")
+        self.assertEqual(1, goc.count)
+
+        with sleuth.detonate("simple_search.models._do_index"):
+            for i in xrange(5):
+                unindex_instance(instance1)
+
+        goc = GlobalOccuranceCount.objects.get(pk="banana")
+        self.assertEqual(0, goc.count)
+
+    def test_multiple_indexing_only_does_one(self):
+        instance1 = SampleModel.objects.create(field1="Banana", field2="Apple")
+        index_instance(instance1, ["field1", "field2"], defer_index=False)
+        index_instance(instance1, ["field1", "field2"], defer_index=False)
+        index_instance(instance1, ["field1", "field2"], defer_index=False)
+
+        goc = GlobalOccuranceCount.objects.get(pk="banana")
+        self.assertEqual(1, goc.count)
+        self.assertEqual(2, Index.objects.count())
+
