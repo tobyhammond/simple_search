@@ -5,8 +5,6 @@ when you run "manage.py test".
 Replace this with more appropriate tests for your application.
 """
 
-from djangae.contrib import sleuth
-
 import unittest
 from django.db import models
 
@@ -143,9 +141,8 @@ class SearchTests(TestCase):
         goc = GlobalOccuranceCount.objects.get(pk="banana")
         self.assertEqual(1, goc.count)
 
-        with sleuth.detonate("simple_search.models._do_index"):
-            for i in xrange(5):
-                unindex_instance(instance1)
+        for i in xrange(5):
+            unindex_instance(instance1)
 
         goc = GlobalOccuranceCount.objects.get(pk="banana")
         self.assertEqual(0, goc.count)
@@ -159,4 +156,3 @@ class SearchTests(TestCase):
         goc = GlobalOccuranceCount.objects.get(pk="banana")
         self.assertEqual(1, goc.count)
         self.assertEqual(2, Index.objects.count())
-
