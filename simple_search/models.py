@@ -4,9 +4,12 @@ import time
 
 from django.db import models
 from django.utils.encoding import smart_str, smart_unicode
-from google.appengine.ext import db
-from google.appengine.ext.deferred import defer
 from django.conf import settings
+
+from djangae.db import transaction
+
+from google.appengine.ext import db
+from google.appengine.ext import deferred
 
 """
     REMAINING TO DO!
@@ -66,26 +69,24 @@ def _do_index(instance, fields_to_index):
 
                     if not term.strip(): continue
 
-                    @db.transactional(xg=True)
-                    def txn(term_):
-                        logging.info("Indexing: '%s', %s", term_, type(term_))
-                        term_count = text.count(term_)
-
-                        Index.objects.create(
-                            iexact=term_,
-                            instance_db_table=instance._meta.db_table,
-                            instance_pk=instance.pk,
-                            occurances=term_count
-                        )
-                        counter, created = GlobalOccuranceCount.objects.get_or_create(pk=term_)
-                        counter.count += term_count
-                        counter.save()
-
                     while True:
                         try:
-                            txn(term)
-                            break
-                        except db.TransactionFailedError:
+                            with transaction.atomic(xg=True):
+                                logging.info("Indexing: '%s', %s", term, type(term))
+                                term_count = text.count(term)
+
+                                Index.objects.create(
+                                    iexact=term,
+                                    instance_db_table=instance._meta.db_table,
+                                    instance_pk=instance.pk,
+                                    occurances=term_count
+                                )
+
+                                counter, created = GlobalOccuranceCount.objects.get_or_create(pk=term)
+                                counter.count += term_count
+                                counter.save()
+                                break
+                        except transaction.TransactionFailedError:
                             logging.warning("Transaction collision, retrying!")
                             time.sleep(1)
                             continue
@@ -94,16 +95,14 @@ def _unindex_then_reindex(instance, fields_to_index):
     unindex_instance(instance)
     _do_index(instance, fields_to_index)
 
-def index_instance(instance, fields_to_index, defer_index=True):
-    """
-        If we are in a transaction, we must defer the unindex and reindex :(
-    """
 
-    if db.is_in_transaction() or defer_index:
-        defer(_unindex_then_reindex, instance, fields_to_index, _queue=QUEUE_FOR_INDEXING)
+@db.non_transactional
+def index_instance(instance, fields_to_index, defer_index=True):
+    if defer_index:
+        deferred.defer(_unindex_then_reindex, instance, fields_to_index, _queue=QUEUE_FOR_INDEXING)
     else:
-        unindex_instance(instance)
-        _do_index(instance, fields_to_index)
+        _unindex_then_reindex(instance, fields_to_index)
+
 
 def unindex_instance(instance):
     indexes = Index.objects.filter(instance_db_table=instance._meta.db_table, instance_pk=instance.pk).all()
@@ -124,9 +123,19 @@ def unindex_instance(instance):
         try:
             while True:
                 try:
-                    txn(index)
-                    break
-                except db.TransactionFailedError:
+                    with transaction.atomic(xg=True):
+                        try:
+                            index = Index.objects.get(pk=index.pk)
+                        except Index.DoesNotExist:
+                            return
+
+                        count = GlobalOccuranceCount.objects.get(pk=index.iexact)
+                        count.count -= index.occurances
+                        count.save()
+                        index.delete()
+                        break
+
+                except transaction.TransactionFailedError:
                     logging.warning("Transaction collision, retrying!")
                     time.sleep(1)
                     continue

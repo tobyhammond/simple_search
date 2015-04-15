@@ -6,9 +6,9 @@ Replace this with more appropriate tests for your application.
 """
 
 import unittest
-from django.test import TestCase
 from django.db import models
-from potatobase.testbase import PotatoTestCase
+
+from djangae.test import TestCase
 
 from .models import (
     GlobalOccuranceCount,
@@ -25,7 +25,7 @@ class SampleModel(models.Model):
     def __unicode__(self):
         return u"{} - {}".format(self.field1, self.field2)
 
-class SearchTests(PotatoTestCase):
+class SearchTests(TestCase):
     def test_field_indexing(self):
         instance1 = SampleModel.objects.create(
             field1="bananas apples cherries plums oranges kiwi"
