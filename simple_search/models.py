@@ -136,7 +136,7 @@ def unindex_instance(instance):
                         index.delete()
 
                         if count.count < 0:
-                            logging.error("The GOC of {} was negative ({}) while unindexing {}".format(count.pk, count.count, index.pk))
+                            logging.error("The GOC of {} was negative ({}) while unindexing {}", count.pk, count.count, index.pk)
                         break
 
                 except transaction.TransactionFailedError:
