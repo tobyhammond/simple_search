@@ -150,7 +150,11 @@ def unindex_instance(instance):
 
 
 def parse_terms(search_string):
-    return shlex.split(smart_str(search_string.lower()))
+    terms = shlex.split(smart_str(search_string.lower()))
+
+    # The split requires the unicode string to be encoded to a bytestring, but
+    # we need the terms to be decoded back to utf-8 for use in the datastore queries.
+    return [smart_unicode(term) for term in terms]
 
 def search(model_class, search_string, per_page=50, current_page=1, total_pages=10, **filters):
     terms = parse_terms(search_string)
