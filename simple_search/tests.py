@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 This file demonstrates writing tests using the unittest module. These will pass
 when you run "manage.py test".
@@ -156,3 +157,14 @@ class SearchTests(TestCase):
         goc = GlobalOccuranceCount.objects.get(pk="banana")
         self.assertEqual(1, goc.count)
         self.assertEqual(2, Index.objects.count())
+
+    def test_non_ascii_characters_in_search_string(self):
+        """
+        Validates that using a search string with characters outside the ASCII
+        set works as expected.
+        """
+        instance1 = SampleModel.objects.create(field1="Banana", field2=u"čherry")
+        index_instance(instance1, ["field1", "field2"], defer_index=False)
+        self.assertItemsEqual([instance1], search(SampleModel, u"čherry"))
+
+
