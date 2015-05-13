@@ -167,4 +167,14 @@ class SearchTests(TestCase):
         index_instance(instance1, ["field1", "field2"], defer_index=False)
         self.assertItemsEqual([instance1], search(SampleModel, u"čherry"))
 
+    def test_indexing_special_characters(self):
+        """
+        Test that nothing trips up when indexing terms that include special
+        characters.
+        """
+        instance1 = SampleModel.objects.create(field1="ąpple ćhęrry")
+        index_instance(instance1, ["field1"], defer_index=False)
+
+        self.assertEqual(1, Index.objects.filter(iexact="ąpple").count())
+        self.assertEqual(1, Index.objects.filter(iexact="ąpple ćhęrry").count())
 
