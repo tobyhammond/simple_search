@@ -4,6 +4,7 @@ import time
 
 from django.db import models
 from django.utils.encoding import smart_str, smart_unicode
+from django.core.exceptions import ObjectDoesNotExist
 from django.conf import settings
 from django.db import IntegrityError
 from djangae.db import transaction
@@ -46,7 +47,12 @@ def _do_index(instance, fields_to_index):
 
         return [ value ]
 
-    instance = instance.__class__.objects.get(pk=instance.pk)
+    try:
+        instance = instance.__class__.objects.get(pk=instance.pk)
+    except ObjectDoesNotExist:
+        logging.info("Attempting to retrieve object of class: '%s' - with pk: '%s'") % (instance.__class__.__name__, instance.pk)
+        raise
+
 
     for field in fields_to_index:
         texts = get_data_from_field(field, instance)
