@@ -50,7 +50,7 @@ def _do_index(instance, fields_to_index):
     try:
         instance = instance.__class__.objects.get(pk=instance.pk)
     except ObjectDoesNotExist:
-        logging.info("Attempting to retrieve object of class: '%s' - with pk: '%s'") % (instance.__class__.__name__, instance.pk)
+        logging.info("Attempting to retrieve object of class: '%s' - with pk: '%s'", instance.__class__.__name__, instance.pk)
         raise
 
 
