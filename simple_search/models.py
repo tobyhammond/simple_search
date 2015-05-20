@@ -116,7 +116,6 @@ def _unindex_then_reindex(instance, fields_to_index):
     _do_index(instance, fields_to_index)
 
 
-@db.non_transactional
 def index_instance(instance, fields_to_index, defer_index=True):
     if defer_index:
         deferred.defer(_unindex_then_reindex, instance, fields_to_index, _queue=QUEUE_FOR_INDEXING)
