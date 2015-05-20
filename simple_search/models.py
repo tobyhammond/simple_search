@@ -47,8 +47,7 @@ def _do_index(instance, fields_to_index):
         return [ value ]
 
     try:
-        with transaction.non_atomic():
-            instance = instance.__class__.objects.get(pk=instance.pk)
+        instance = instance.__class__.objects.get(pk=instance.pk)
     except ObjectDoesNotExist:
         logging.info("Attempting to retrieve object of class: '%s' - with pk: '%s'", instance.__class__.__name__, instance.pk)
         raise
