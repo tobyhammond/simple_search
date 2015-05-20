@@ -47,7 +47,8 @@ def _do_index(instance, fields_to_index):
         return [ value ]
 
     try:
-        instance = instance.__class__.objects.get(pk=instance.pk)
+        with transaction.non_atomic():
+            instance = instance.__class__.objects.get(pk=instance.pk)
     except ObjectDoesNotExist:
         logging.info("Attempting to retrieve object of class: '%s' - with pk: '%s'", instance.__class__.__name__, instance.pk)
         raise
@@ -118,7 +119,7 @@ def _unindex_then_reindex(instance, fields_to_index):
 def index_instance(instance, fields_to_index, defer_index=True):
     if defer_index:
         deferred.defer(_unindex_then_reindex, instance, fields_to_index,
-                        _queue=QUEUE_FOR_INDEXING, _transactional=transaction.in_atomic_block)
+                        _queue=QUEUE_FOR_INDEXING, _transactional=transaction.in_atomic_block())
     else:
         _unindex_then_reindex(instance, fields_to_index)
 
